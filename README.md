@@ -1,5 +1,5 @@
-.:: HUMIDOR ::.
-===============
+.:: HUMIDOR-DEVICE ::.
+======================
 
 Version: 0.0.1, 2016
 Author: Filip Bielejec

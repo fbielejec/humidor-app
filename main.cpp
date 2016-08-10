@@ -16,7 +16,7 @@
 //---PROTOTYPES---//
 ////////////////////
 
-
+byte postPage(char* domainBuffer,int thisPort,char* page,char* thisData);
 
 /////////////////////
 //---GLOBAL VARS---//
@@ -50,33 +50,26 @@ unsigned long lastMillis = 0;
 
 void init_io(void) {
 
-     init();
+    init();
 
     // open serial port
     Serial.begin(9600);
-      while (!Serial);
+    while (!Serial);
     Serial.println("\t Comm-link online");
 
-// disable SD SPI
-  pinMode(4,OUTPUT);
-  digitalWrite(4,HIGH);
+    // disable SD SPI
+    pinMode(4,OUTPUT);
+    digitalWrite(4,HIGH);
 
-  // Start ethernet
-  Serial.println(F("Starting ethernet..."));
-  Ethernet.begin(mac, ip, gateway, gateway, subnet);
+    Serial.print(F("Starting ethernet..."));
+    if(!Ethernet.begin(mac)) {
+        Serial.println(F("failed"));
+    } else {
+        Serial.println(Ethernet.localIP());
+    }
 
-  // If using dhcp, comment out the line above
-  // and uncomment the next 2 lines plus the Ethernet.maintain call in loop
-
-  // if(!Ethernet.begin(mac)) Serial.println(F("failed"));
-  // else Serial.println(F("ok"));
-
-  Serial.println(Ethernet.localIP());
-
-  delay(2000);
-  Serial.println(F("Ready"));
-
-
+    delay(2000);
+    Serial.println(F("Ready"));
 
 }//END: init_io
 
@@ -84,13 +77,80 @@ int main(void) {
 
     init_io();
 
-
-
     while (1) {
 
+        // If using a static IP, comment out the next line
+        Ethernet.maintain();
+
+        thisMillis = millis();
+        if(thisMillis - lastMillis > delayMillis) {
+            lastMillis = thisMillis;
+
+            // params must be url encoded.
+            sprintf(params, "temp1=%i", totalCount);
+            if(!postPage(serverName, serverPort, pageName, params)) {
+                Serial.print(F("Fail "));
+            } else {
+                Serial.print(F("Pass "));
+            }
+
+            totalCount++;
+            Serial.println(totalCount, DEC);
+        }
 
     }//END: loop
 
     return 0;
 }//END: main
 
+
+byte postPage(char* domainBuffer, int thisPort,char* page, char* thisData) {
+
+    int inChar;
+    char outBuf[64];
+
+    Serial.print(F("connecting..."));
+
+    if(client.connect(domainBuffer,thisPort) == 1) {
+        Serial.println(F("connected"));
+
+        // send the header
+        sprintf(outBuf, "POST %s HTTP/1.1", page);
+        client.println(outBuf);
+        sprintf(outBuf, "Host: %s", domainBuffer);
+        client.println(outBuf);
+        client.println(F("Connection: close\r\nContent-Type: application/x-www-form-urlencoded"));
+        sprintf(outBuf, "Content-Length: %u\r\n", strlen(thisData));
+        client.println(outBuf);
+
+        // send the body (variables)
+        client.print(thisData);
+    } else {
+        Serial.println(F("failed"));
+        return 0;
+    }
+
+    int connectLoop = 0;
+
+    while(client.connected()) {
+        while(client.available()) {
+            inChar = client.read();
+            Serial.write(inChar);
+            connectLoop = 0;
+        }
+
+        delay(1);
+        connectLoop++;
+        if(connectLoop > 10000) {
+            Serial.println();
+            Serial.println(F("Timeout"));
+            client.stop();
+        }
+    }
+
+    Serial.println();
+    Serial.println(F("disconnecting."));
+    client.stop();
+
+    return 1;
+}
